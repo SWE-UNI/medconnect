@@ -1,0 +1,343 @@
+@page "/login"
+@layout MedConnect.Client.Shared.AuthLayout
+@using MedConnect.Client.Features.Auth.Dtos
+@using MedConnect.Client.Shared
+@inject AuthApiClient AuthApi
+@inject TokenStorage TokenStorage
+@inject CustomAuthStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Sign in - MedConnect GH</PageTitle>
+
+<div class="h-screen w-full flex flex-col md:flex-row md:overflow-hidden bg-white relative">
+    <div class="absolute top-4 right-4 z-50">
+        <ThemeToggle CustomClass="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-600 transition-colors shadow-sm focus:outline-none" />
+    </div>
+    <!-- Left Section: Branding & Highlights -->
+    <div class="hidden md:flex md:w-1/2 flex-col bg-blue-600 text-white px-10 py-6 md:overflow-y-auto">
+        <div class="max-w-xl mx-auto my-auto w-full py-4">
+            <h1 class="text-3xl md:text-4xl font-bold tracking-tight mb-1 text-center md:text-left">
+                MedConnect
+            </h1>
+            <p class="text-blue-100 text-base font-medium mb-6 text-center md:text-left">
+                Connected Healthcare & Patient Management
+            </p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <!-- Item 1 -->
+                <div class="flex flex-col items-start p-4 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition duration-150 ease-in-out">
+                    <div class="h-8 w-8 rounded-md bg-white/15 flex items-center justify-center mb-2">
+                        <svg class="h-[18px] w-[18px] text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                    </div>
+                    <h4 class="font-semibold text-sm text-white">Care Collaboration</h4>
+                    <p class="text-blue-100 text-[11px] mt-1 leading-relaxed">Work together seamlessly with doctors and health workers.</p>
+                </div>
+
+                <!-- Item 2 -->
+                <div class="flex flex-col items-start p-4 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition duration-150 ease-in-out">
+                    <div class="h-8 w-8 rounded-md bg-white/15 flex items-center justify-center mb-2">
+                        <svg class="h-[18px] w-[18px] text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z" />
+                        </svg>
+                    </div>
+                    <h4 class="font-semibold text-sm text-white">Real-time Vitals</h4>
+                    <p class="text-blue-100 text-[11px] mt-1 leading-relaxed">Track critical vital signs and patient status in real time.</p>
+                </div>
+
+                <!-- Item 3 -->
+                <div class="flex flex-col items-start p-4 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition duration-150 ease-in-out">
+                    <div class="h-8 w-8 rounded-md bg-white/15 flex items-center justify-center mb-2">
+                        <svg class="h-[18px] w-[18px] text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                    </div>
+                    <h4 class="font-semibold text-sm text-white">Secure & Compliant</h4>
+                    <p class="text-blue-100 text-[11px] mt-1 leading-relaxed">Built with robust security to protect sensitive patient records.</p>
+                </div>
+
+                <!-- Item 4 -->
+                <div class="flex flex-col items-start p-4 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition duration-150 ease-in-out">
+                    <div class="h-8 w-8 rounded-md bg-white/15 flex items-center justify-center mb-2">
+                        <svg class="h-[18px] w-[18px] text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                    <h4 class="font-semibold text-sm text-white">Intuitive Workflow</h4>
+                    <p class="text-blue-100 text-[11px] mt-1 leading-relaxed">Simple, elegant design built for clinical efficiency.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Section: Login Form -->
+    <div class="w-full md:w-1/2 flex items-center justify-center bg-white px-8 py-16 md:px-16 md:overflow-y-auto">
+        <div class="w-full max-w-md">
+            <div class="text-center mb-8">
+                <!-- Mobile Logo & Brand Header -->
+                <div class="flex items-center justify-center gap-2.5 mb-5 md:hidden">
+                    <div class="h-9 w-9 shrink-0 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-sm">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+                            <path d="M12 5v14M5 12h14" />
+                        </svg>
+                    </div>
+                    <span class="text-xl font-bold tracking-tight text-blue-600">MedConnect</span>
+                </div>
+
+                <h2 class="text-2xl md:text-3xl font-bold text-blue-600 tracking-tight mb-1 md:mb-2">
+                    Welcome Back
+                </h2>
+                <p class="text-slate-500 text-sm">
+                    Sign in to your account
+                </p>
+            </div>
+
+            <EditForm Model="_model" OnValidSubmit="HandleLoginAsync" class="space-y-6">
+                <!-- Email / NHIS Field -->
+                <div class="relative rounded-md border border-slate-300 focus-within:border-blue-600 focus-within:ring-1 focus-within:ring-blue-600 bg-[#EDF3FC]">
+                    <span class="absolute -top-2.5 left-3 bg-white px-1 text-[11px] text-blue-600 font-semibold tracking-wide">
+                        Email or NHIS number *
+                    </span>
+                    <InputText id="identifier" @bind-Value="_model.Identifier" @bind-Value:after="OnIdentifierChangedAsync" placeholder="admin@medconnect.gh or 1234567890"
+                               class="w-full bg-transparent text-slate-800 text-sm focus:outline-none px-3.5 py-3" />
+                </div>
+
+                <!-- Password Field -->
+                <div class="relative rounded-md border border-slate-300 focus-within:border-blue-600 focus-within:ring-1 focus-within:ring-blue-600 bg-[#EDF3FC]">
+                    <span class="absolute -top-2.5 left-3 bg-white px-1 text-[11px] text-slate-500 font-semibold tracking-wide focus-within:text-blue-600">
+                        Password *
+                    </span>
+                    <InputText id="password" type="password" @bind-Value="_model.Password" placeholder="••••••••"
+                               class="w-full bg-transparent text-slate-800 text-sm focus:outline-none px-3.5 py-3" />
+                </div>
+
+                @if (_twoFactorPending)
+                {
+                    <p class="text-xs text-blue-600 font-medium">
+                        This account uses two-factor authentication. Enter the code from your authenticator app.
+                    </p>
+                    <div class="relative rounded-md border border-slate-300 focus-within:border-blue-600 focus-within:ring-1 focus-within:ring-blue-600 bg-[#EDF3FC]">
+                        <span class="absolute -top-2.5 left-3 bg-white px-1 text-[11px] text-blue-600 font-semibold tracking-wide">
+                            Authenticator code *
+                        </span>
+                        <InputText id="code" @bind-Value="_model.Code" inputmode="numeric" autocomplete="one-time-code"
+                                   placeholder="000000" class="w-full bg-transparent text-slate-800 text-sm focus:outline-none px-3.5 py-3" />
+                    </div>
+                }
+
+                @if (_error is not null)
+                {
+                    <div class="text-xs text-red-600 font-medium">
+                        @_error
+                    </div>
+                }
+
+                <!-- Remember Me -->
+                <div class="flex items-center">
+                    <input id="remember-me" type="checkbox"
+                           checked="@_model.RememberMe"
+                           @onchange="OnRememberMeChangedAsync"
+                           class="h-4 w-4 cursor-pointer"
+                           style="accent-color: #2563eb;" />
+                    <label for="remember-me" class="ml-2 block text-sm text-slate-700 select-none cursor-pointer">
+                        Remember me
+                    </label>
+                </div>
+
+                <!-- Submit Button -->
+                <div>
+                    <button type="submit" disabled="@_busy"
+                            class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-3 px-4 rounded-md tracking-wider uppercase transition duration-150 ease-in-out disabled:opacity-50 shadow-sm">
+                        @(_busy ? "PLEASE WAIT..." : _twoFactorPending ? "VERIFY CODE" : "SIGN IN")
+                    </button>
+                </div>
+            </EditForm>
+
+            <!-- Links -->
+            <div class="mt-8 text-center space-y-3">
+                <div>
+                    <a href="/forgot-password" class="text-sm font-semibold text-blue-600 hover:underline">
+                        Forgot password?
+                    </a>
+                </div>
+                <div class="text-xs text-slate-500">
+                    Don't have an account? 
+                    <a href="/register" class="font-bold text-blue-600 hover:underline">
+                        Register
+                    </a>
+                </div>
+                <div class="pt-4 border-t border-slate-100 text-xs text-slate-500 flex items-center justify-center gap-1.5 flex-wrap">
+                    <svg class="h-3.5 w-3.5 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    <span>Need help? Contact support:</span>
+                    <a href="mailto:support@medconnect.gh?subject=MedConnect%20Support%20Request"
+                       class="font-semibold text-blue-600 hover:underline">
+                        support@medconnect.gh
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly LoginFormModel _model = new();
+    private string? _error;
+    private bool _busy;
+    private bool _twoFactorPending;
+    private string? _pendingToken;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var rememberMeFlag = await JS.InvokeAsync<string?>("localStorage.getItem", "medconnect_remember_me");
+            var saved = await JS.InvokeAsync<string?>("localStorage.getItem", "medconnect_remember_identifier");
+            if (rememberMeFlag == "true" || !string.IsNullOrWhiteSpace(saved))
+            {
+                _model.RememberMe = true;
+                if (!string.IsNullOrWhiteSpace(saved))
+                {
+                    _model.Identifier = saved;
+                }
+            }
+        }
+        catch
+        {
+            // Ignore during prerendering or if storage is blocked
+        }
+    }
+
+    private async Task OnRememberMeChangedAsync(ChangeEventArgs e)
+    {
+        _model.RememberMe = (bool)(e.Value ?? false);
+        try
+        {
+            if (_model.RememberMe)
+            {
+                await JS.InvokeVoidAsync("localStorage.setItem", "medconnect_remember_me", "true");
+                if (!string.IsNullOrWhiteSpace(_model.Identifier))
+                {
+                    await JS.InvokeVoidAsync("localStorage.setItem", "medconnect_remember_identifier", _model.Identifier.Trim());
+                }
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("localStorage.removeItem", "medconnect_remember_me");
+                await JS.InvokeVoidAsync("localStorage.removeItem", "medconnect_remember_identifier");
+            }
+        }
+        catch
+        {
+            // Ignore storage errors
+        }
+    }
+
+    private async Task OnIdentifierChangedAsync()
+    {
+        if (_model.RememberMe)
+        {
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(_model.Identifier))
+                {
+                    await JS.InvokeVoidAsync("localStorage.setItem", "medconnect_remember_identifier", _model.Identifier.Trim());
+                }
+                else
+                {
+                    await JS.InvokeVoidAsync("localStorage.removeItem", "medconnect_remember_identifier");
+                }
+            }
+            catch
+            {
+                // Ignore storage errors
+            }
+        }
+    }
+
+    private async Task HandleLoginAsync()
+    {
+        _busy = true;
+        _error = null;
+
+        if (_twoFactorPending)
+        {
+            var verification = await AuthApi.VerifyTwoFactorAsync(_model.Code, _pendingToken!);
+            if (verification.Succeeded)
+            {
+                await CompleteSignInAsync(verification.Value!);
+            }
+            else
+            {
+                _error = verification.Error;
+                _busy = false;
+            }
+
+            return;
+        }
+
+        var identifier = _model.Identifier.Trim();
+        var isEmail = identifier.Contains('@');
+        var dto = new LoginDto(
+            isEmail ? identifier : null,
+            isEmail ? null : identifier,
+            _model.Password);
+
+        var result = await AuthApi.LoginAsync(dto);
+        if (result.Succeeded)
+        {
+            if (result.Value!.TwoFactorRequired)
+            {
+                _twoFactorPending = true;
+                _pendingToken = result.Value.Token;
+                _model.Code = "";
+                _busy = false;
+            }
+            else
+            {
+                await CompleteSignInAsync(result.Value);
+            }
+        }
+        else
+        {
+            _error = result.Error;
+            _busy = false;
+        }
+    }
+
+    private async Task CompleteSignInAsync(AuthResponseDto response)
+    {
+        try
+        {
+            if (_model.RememberMe)
+            {
+                await JS.InvokeVoidAsync("localStorage.setItem", "medconnect_remember_me", "true");
+                await JS.InvokeVoidAsync("localStorage.setItem", "medconnect_remember_identifier", _model.Identifier.Trim());
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("localStorage.removeItem", "medconnect_remember_me");
+                await JS.InvokeVoidAsync("localStorage.removeItem", "medconnect_remember_identifier");
+            }
+        }
+        catch
+        {
+            // Ignore storage errors
+        }
+
+        await TokenStorage.SetTokenAsync(response.Token);
+        AuthStateProvider.NotifyUserAuthenticated(response.Token);
+        Navigation.NavigateTo("/");
+    }
+
+    private class LoginFormModel
+    {
+        public string Identifier { get; set; } = "";
+        public string Password { get; set; } = "";
+        public string Code { get; set; } = "";
+        public bool RememberMe { get; set; }
+    }
+}
