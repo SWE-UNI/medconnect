@@ -1,0 +1,171 @@
+@page "/staff"
+@attribute [Authorize(Roles = "Admin")]
+@using System.ComponentModel.DataAnnotations
+@using MedConnect.Client.Features.Auth
+@using MedConnect.Client.Features.Auth.Dtos
+@using MedConnect.Client.Features.Facilities
+@using MedConnect.Client.Features.Divisions
+@inject AuthApiClient AuthApi
+@inject FacilitiesApiClient FacilitiesApi
+@inject DivisionsApiClient DivisionsApi
+
+<PageTitle>Staff Accounts - MedConnect GH</PageTitle>
+
+<div class="space-y-5">
+    <div>
+        <h1 class="text-xl font-bold text-slate-900">Staff Accounts</h1>
+        <p class="text-sm text-slate-500">Create accounts for clinical and front-desk staff. Staff cannot self-register; only an admin can provision them.</p>
+    </div>
+
+    <div class="max-w-xl rounded-md border border-slate-200 bg-white p-6">
+        <EditForm Model="_model" OnValidSubmit="HandleCreateAsync" class="space-y-3">
+            <DataAnnotationsValidator />
+            <label class="block text-xs">
+                <span class="text-slate-500">Full name</span>
+                <InputText id="fullName" @bind-Value="_model.FullName" class="@FieldClass" />
+                <ValidationMessage For="() => _model.FullName" class="mt-1 block text-xs text-red-600" />
+            </label>
+            <label class="block text-xs">
+                <span class="text-slate-500">Email</span>
+                <InputText id="email" @bind-Value="_model.Email" class="@FieldClass" />
+                <ValidationMessage For="() => _model.Email" class="mt-1 block text-xs text-red-600" />
+            </label>
+            <label class="block text-xs">
+                <span class="text-slate-500">Password</span>
+                <InputText id="password" type="password" @bind-Value="_model.Password" class="@FieldClass" />
+                <ValidationMessage For="() => _model.Password" class="mt-1 block text-xs text-red-600" />
+            </label>
+            <label class="block text-xs">
+                <span class="text-slate-500">Role</span>
+                <InputSelect id="role" @bind-Value="_model.Role" class="@FieldClass">
+                    <option value="CHW">Community Health Worker</option>
+                    <option value="Doctor">Doctor</option>
+                    <option value="Nurse">Nurse</option>
+                    <option value="Receptionist">Receptionist</option>
+                    <option value="FacilityAdmin">Facility Admin</option>
+                    <option value="Admin">Admin</option>
+                </InputSelect>
+            </label>
+
+            @if (RequiresFacility)
+            {
+                <label class="block text-xs">
+                    <span class="text-slate-500">Facility</span>
+                    <InputSelect id="facility" @bind-Value="_model.FacilityId" class="@FieldClass">
+                        <option value="">Select a facility...</option>
+                        @foreach (var facility in _facilities)
+                        {
+                            <option value="@facility.FacilityId">@facility.Name</option>
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="() => _model.FacilityId" class="mt-1 block text-xs text-red-600" />
+                </label>
+            }
+
+            @if (_model.Role is "Doctor")
+            {
+                <label class="block text-xs">
+                    <span class="text-slate-500">Division</span>
+                    <InputSelect id="division" @bind-Value="_model.DivisionId" class="@FieldClass">
+                        <option value="">Select a division...</option>
+                        @foreach (var division in _divisions)
+                        {
+                            <option value="@division.DivisionId">@division.Name</option>
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="() => _model.DivisionId" class="mt-1 block text-xs text-red-600" />
+                </label>
+            }
+
+            @if (_success is not null)
+            {
+                <p class="text-xs text-green-600">@_success</p>
+            }
+            @if (_error is not null)
+            {
+                <p class="text-xs text-red-600">@_error</p>
+            }
+
+            <button type="submit" disabled="@_busy"
+                    class="min-h-[44px] rounded-md bg-blue-600 px-4 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
+                @(_busy ? "Creating account..." : "Create staff account")
+            </button>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private const string FieldClass =
+        "mt-1 w-full min-h-[44px] rounded-md border border-slate-300 px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30";
+
+    private bool RequiresFacility => _model.Role is "CHW" or "Doctor" or "Nurse" or "Receptionist" or "FacilityAdmin";
+
+    private readonly StaffFormModel _model = new();
+    private List<FacilityDto> _facilities = [];
+    private List<DivisionDto> _divisions = [];
+    private string? _error;
+    private string? _success;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _facilities = await FacilitiesApi.GetAllAsync();
+        _divisions = await DivisionsApi.GetAllAsync();
+    }
+
+    private async Task HandleCreateAsync()
+    {
+        _busy = true;
+        _error = null;
+        _success = null;
+
+        var dto = new RegisterStaffDto(
+            _model.Email,
+            _model.Password,
+            _model.FullName,
+            _model.Role,
+            string.IsNullOrEmpty(_model.FacilityId) ? null : int.Parse(_model.FacilityId),
+            string.IsNullOrEmpty(_model.DivisionId) ? null : int.Parse(_model.DivisionId));
+
+        var result = await AuthApi.RegisterStaffAsync(dto);
+        if (result.Succeeded)
+        {
+            _success = "Staff account created.";
+            _model.Reset();
+        }
+        else
+        {
+            _error = result.Error;
+        }
+
+        _busy = false;
+    }
+
+    private class StaffFormModel
+    {
+        [Required(ErrorMessage = "Full name is required.")]
+        public string FullName { get; set; } = "";
+
+        [Required(ErrorMessage = "Email is required.")]
+        [EmailAddress(ErrorMessage = "Enter a valid email address.")]
+        public string Email { get; set; } = "";
+
+        [Required(ErrorMessage = "Password is required.")]
+        [MinLength(8, ErrorMessage = "Password must be at least 8 characters.")]
+        public string Password { get; set; } = "";
+
+        public string Role { get; set; } = "CHW";
+        public string FacilityId { get; set; } = "";
+        public string DivisionId { get; set; } = "";
+
+        public void Reset()
+        {
+            FullName = "";
+            Email = "";
+            Password = "";
+            Role = "CHW";
+            FacilityId = "";
+            DivisionId = "";
+        }
+    }
+}
