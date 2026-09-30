@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("MedConnect.Client")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+34b6be7e708adb8c8159f5062f6d0ffc0f8d6bec")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+00e85b4f1350202916ba99b8390b067903b0dc0a")]
 [assembly: System.Reflection.AssemblyProductAttribute("MedConnect.Client")]
 [assembly: System.Reflection.AssemblyTitleAttribute("MedConnect.Client")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
