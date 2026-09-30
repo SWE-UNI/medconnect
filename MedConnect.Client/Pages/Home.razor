@@ -1,0 +1,130 @@
+@page "/"
+@using MedConnect.Client.Features.Facilities
+@using MedConnect.Client.Features.Patients
+@using MedConnect.Client.Features.Referrals
+@using MedConnect.Client.Shared
+@inject PatientsApiClient PatientsApi
+@inject ReferralsApiClient ReferralsApi
+@inject FacilitiesApiClient FacilitiesApi
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Dashboard - MedConnect GH</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="max-w-5xl">
+            <p class="text-sm text-slate-500">Welcome back, @context.User.FindFirst("FullName")?.Value</p>
+
+            <AuthorizeView Roles="CHW,Doctor,Nurse,FacilityAdmin,Admin" Context="statsContext">
+                <Authorized>
+                    @if (_statsLoaded)
+                    {
+                        <div class="mt-4 grid grid-cols-2 sm:grid-cols-2 gap-3 max-w-md">
+                            <div class="rounded-md border border-slate-200 bg-white p-4">
+                                <div class="flex items-center justify-between">
+                                    <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Total patients</p>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-slate-400"><circle cx="9" cy="8" r="3" /><path d="M2 20v-1a6 6 0 0 1 12 0v1" /><circle cx="17" cy="8" r="3" /><path d="M14 14.5A6 6 0 0 1 22 20v1" /></svg>
+                                </div>
+                                <p class="mt-1 text-2xl font-semibold tabular-nums text-slate-900">@_totalPatients</p>
+                            </div>
+                            <div class="rounded-md border border-slate-200 bg-white p-4">
+                                <div class="flex items-center justify-between">
+                                    <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Pending referrals</p>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4 text-amber-500"><path d="M17 3l4 4-4 4" /><path d="M3 7h18" /><path d="M7 21l-4-4 4-4" /><path d="M21 17H3" /></svg>
+                                </div>
+                                <p class="mt-1 text-2xl font-semibold tabular-nums text-slate-900">@_pendingReferrals</p>
+                            </div>
+                        </div>
+                    }
+                </Authorized>
+            </AuthorizeView>
+
+            <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <AuthorizeView Roles="Patient" Context="patientContext">
+                    <Authorized>
+                        <div class="rounded-md border border-slate-200 bg-white p-4">
+                            <p class="text-sm font-semibold text-slate-900">Your record</p>
+                            <p class="mt-1 text-sm text-slate-500">View your visit history, referrals, and appointments.</p>
+                            <a href="/my-record" class="mt-3 inline-flex min-h-[44px] items-center rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">Go to My Record</a>
+                        </div>
+                    </Authorized>
+                </AuthorizeView>
+
+                <AuthorizeView Roles="CHW,Doctor,Nurse,FacilityAdmin,Admin" Context="staffContext">
+                    <Authorized>
+                        <div class="rounded-md border border-slate-200 bg-white p-4">
+                            <p class="text-sm font-semibold text-slate-900">Patients</p>
+                            <p class="mt-1 text-sm text-slate-500">Look up patient records and register new patients.</p>
+                            <a href="/patients" class="mt-3 inline-flex min-h-[44px] items-center rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">Go to Patients</a>
+                        </div>
+                        <div class="rounded-md border border-slate-200 bg-white p-4">
+                            <p class="text-sm font-semibold text-slate-900">Referrals</p>
+                            <p class="mt-1 text-sm text-slate-500">Track incoming referrals for your facility in real time.</p>
+                            <a href="/referrals" class="mt-3 inline-flex min-h-[44px] items-center rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">Go to Referrals</a>
+                        </div>
+                    </Authorized>
+                </AuthorizeView>
+
+                <AuthorizeView Roles="CHW" Context="chwContext">
+                    <Authorized>
+                        <div class="rounded-md border border-slate-200 bg-white p-4">
+                            <p class="text-sm font-semibold text-slate-900">Field visits</p>
+                            <p class="mt-1 text-sm text-slate-500">Log a household visit.</p>
+                            <a href="/field-visits" class="mt-3 inline-flex min-h-[44px] items-center rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">Go to Field Visits</a>
+                        </div>
+                    </Authorized>
+                </AuthorizeView>
+
+                <AuthorizeView Roles="Admin" Context="adminContext">
+                    <Authorized>
+                        <div class="rounded-md border border-slate-200 bg-white p-4">
+                            <p class="text-sm font-semibold text-slate-900">Facilities</p>
+                            <p class="mt-1 text-sm text-slate-500">Manage the facility directory.</p>
+                            <a href="/facilities" class="mt-3 inline-flex min-h-[44px] items-center rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">Go to Facilities</a>
+                        </div>
+                    </Authorized>
+                </AuthorizeView>
+            </div>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private bool _statsLoaded;
+    private int _totalPatients;
+    private int _pendingReferrals;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (!user.IsInRole("CHW") && !user.IsInRole("Doctor") && !user.IsInRole("Nurse") &&
+            !user.IsInRole("FacilityAdmin") && !user.IsInRole("Admin"))
+        {
+            return;
+        }
+
+        _totalPatients = (await PatientsApi.GetAllAsync()).Count;
+
+        var facilityClaim = user.FindFirst("FacilityId")?.Value;
+        if (facilityClaim is not null && int.TryParse(facilityClaim, out var facilityId))
+        {
+            var referrals = await ReferralsApi.GetIncomingAsync(facilityId);
+            _pendingReferrals = referrals.Count(r => r.Status == 0);
+        }
+        else if (user.IsInRole("Admin"))
+        {
+            var facilities = await FacilitiesApi.GetAllAsync();
+            foreach (var facility in facilities)
+            {
+                var referrals = await ReferralsApi.GetIncomingAsync(facility.FacilityId);
+                _pendingReferrals += referrals.Count(r => r.Status == 0);
+            }
+        }
+
+        _statsLoaded = true;
+    }
+}

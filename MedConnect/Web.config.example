@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Deployment template for MedConnect.Web.config (never committed with real values).
+  1. Copy this file to `Web.config` in the MedConnect project root (git-ignored).
+  2. Fill in the connection string, JWT signing key, and choose a strong admin password.
+  3. The file is merged into the publish output automatically; deploy with WebDeploy.
+-->
+<configuration>
+  <location path="." inheritInChildApplications="false">
+    <system.webServer>
+      <handlers>
+        <add name="aspNetCore" path="*" verb="*" modules="AspNetCoreModuleV2" resourceType="Unspecified" />
+      </handlers>
+      <aspNetCore processPath="dotnet" arguments=".\MedConnect.dll" stdoutLogEnabled="true" stdoutLogFile=".\logs\stdout" hostingModel="inprocess">
+        <environmentVariables>
+          <environmentVariable name="ASPNETCORE_ENVIRONMENT" value="Production" />
+
+          <!-- Host MSSQL connection string (from your host's database panel). -->
+          <environmentVariable name="ConnectionStrings__Default"
+                               value="Server=CHANGE_ME;Database=MedConnectDb;User Id=CHANGE_ME;Password=CHANGE_ME;TrustServerCertificate=True;MultipleActiveResultSets=true" />
+
+          <!-- JWT signing key: random, at least 32 bytes. Never share this. -->
+          <environmentVariable name="Jwt__Key" value="CHANGE_ME_LONG_RANDOM_SECRET_AT_LEAST_32_CHARS" />
+          <environmentVariable name="Jwt__Issuer" value="MedConnectGH" />
+          <environmentVariable name="Jwt__Audience" value="MedConnectGH.Client" />
+
+          <!-- Production SPA origins, comma-separated (needed for CORS + SignalR). -->
+          <environmentVariable name="Cors__Origins" value="https://medconnect-1ve.pages.dev" />
+
+          <!-- Seeded admin account (created only when no admin exists yet). -->
+          <environmentVariable name="AdminBootstrap__Email" value="admin@medconnect.gh" />
+          <environmentVariable name="AdminBootstrap__Password" value="CHANGE_ME_STRONG_PASSWORD" />
+
+          <!-- Optional SMS provider settings. -->
+          <environmentVariable name="Sms__ApiKey" value="" />
+          <environmentVariable name="Sms__SenderId" value="MEDCONNECT" />
+        </environmentVariables>
+      </aspNetCore>
+    </system.webServer>
+  </location>
+</configuration>

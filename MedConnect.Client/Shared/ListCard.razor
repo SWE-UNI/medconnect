@@ -1,0 +1,50 @@
+@typeparam TItem
+
+<div class="rounded-md border border-slate-200 bg-white">
+    @if (!string.IsNullOrEmpty(Title) || HeaderContent is not null)
+    {
+        <div class="flex items-center justify-between p-4 pb-0">
+            @if (!string.IsNullOrEmpty(Title))
+            {
+                <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">@Title</p>
+            }
+            @HeaderContent
+        </div>
+    }
+
+    @if (Loading)
+    {
+        <p class="p-4 text-sm text-slate-500">@LoadingText</p>
+    }
+    else if (Items is null || !Items.Any())
+    {
+        <p class="p-4 text-sm text-slate-500">@EmptyText</p>
+    }
+    else
+    {
+        <ul class="@(string.IsNullOrEmpty(Title) && HeaderContent is null ? "" : "mt-3 ")divide-y divide-slate-100">
+            @foreach (var item in Items)
+            {
+                <li>@RowTemplate(item)</li>
+            }
+        </ul>
+    }
+
+    @if (FooterContent is not null)
+    {
+        <div class="border-t border-slate-100">
+            @FooterContent
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IEnumerable<TItem>? Items { get; set; }
+    [Parameter, EditorRequired] public RenderFragment<TItem> RowTemplate { get; set; } = null!;
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public RenderFragment? HeaderContent { get; set; }
+    [Parameter] public RenderFragment? FooterContent { get; set; }
+    [Parameter] public bool Loading { get; set; }
+    [Parameter] public string LoadingText { get; set; } = "Loading...";
+    [Parameter] public string EmptyText { get; set; } = "Nothing here yet.";
+}

@@ -1,0 +1,139 @@
+@inherits LayoutComponentBase
+@using MedConnect.Client.Shared
+@using MedConnect.Client.Features.Referrals
+@inject NavigationManager Navigation
+@inject TokenStorage TokenStorage
+@inject CustomAuthStateProvider AuthStateProvider
+@implements IDisposable
+
+<div class="flex h-screen bg-slate-50 text-slate-900">
+    <Sidebar IsMobileOpen="_mobileNavOpen" IsMobileOpenChanged="(val) => _mobileNavOpen = val" />
+    <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <header class="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 lg:px-6">
+            <div class="flex items-center gap-3">
+                <button type="button" @onclick="() => _mobileNavOpen = !_mobileNavOpen" aria-label="Toggle navigation menu"
+                        class="flex h-9 w-9 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-slate-900 lg:hidden focus:outline-none">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+                        <line x1="3" y1="12" x2="21" y2="12" />
+                        <line x1="3" y1="6" x2="21" y2="6" />
+                        <line x1="3" y1="18" x2="21" y2="18" />
+                    </svg>
+                </button>
+                <a href="/" class="flex items-center lg:hidden hover:opacity-80 transition-opacity focus:outline-none" title="Dashboard">
+                    <div class="h-7 w-7 shrink-0 rounded-md bg-blue-600 text-white flex items-center justify-center">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M12 5v14M5 12h14" /></svg>
+                    </div>
+                </a>
+                <h2 class="text-sm font-semibold text-slate-900 truncate">@CurrentTitle</h2>
+            </div>
+            <div class="flex items-center gap-1.5 sm:gap-2">
+                <ThemeToggle />
+                <a href="/spotlight" title="Quick Lookup"
+                   class="flex h-9 w-9 items-center justify-center rounded-md text-slate-400 hover:bg-slate-50 hover:text-slate-600">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+                        <circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" />
+                    </svg>
+                </a>
+
+                <AuthorizeView>
+                    <Authorized>
+                        <div class="h-6 w-px bg-slate-200"></div>
+                        <div class="relative">
+                            <button @onclick="() => _showProfileMenu = !_showProfileMenu" title="Profile"
+                                    class="flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-600 hover:border-slate-300">
+                                @GetInitials(context.User.FindFirst("FullName")?.Value)
+                            </button>
+
+                            @if (_showProfileMenu)
+                            {
+                                <div class="fixed inset-0 z-40" @onclick="() => _showProfileMenu = false"></div>
+                                <div class="absolute right-0 top-full mt-2 w-56 rounded-md border border-slate-200 bg-white shadow-lg z-50">
+                                    <div class="p-3 border-b border-slate-100">
+                                        <p class="text-sm font-medium text-slate-900 truncate">@context.User.FindFirst("FullName")?.Value</p>
+                                        <p class="text-xs text-slate-500">@context.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value</p>
+                                    </div>
+                                    <button @onclick="LogoutAsync"
+                                            class="w-full min-h-[44px] px-3 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900">
+                                        Sign out
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    </Authorized>
+                </AuthorizeView>
+            </div>
+        </header>
+        <ReferralLiveTracker />
+        <main class="flex-1 overflow-y-auto px-4 py-4 lg:px-6 lg:py-6">
+            @Body
+        </main>
+    </div>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet style="display:none"
+     class="fixed bottom-0 inset-x-0 z-50 bg-blue-600 text-white text-sm px-4 py-3 flex items-center justify-between">
+    <span>An unhandled error has occurred.</span>
+    <span>
+        <a href="." class="reload underline font-medium">Reload</a>
+        <span class="dismiss cursor-pointer ml-3">&#128169;</span>
+    </span>
+</div>
+
+@code {
+    private bool _showProfileMenu;
+    private bool _mobileNavOpen;
+
+    private string CurrentTitle => GetTitle(Navigation.ToBaseRelativePath(Navigation.Uri).Split('?')[0].TrimEnd('/'));
+
+    protected override void OnInitialized() => Navigation.LocationChanged += OnLocationChanged;
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        _mobileNavOpen = false;
+        _showProfileMenu = false;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+
+    private async Task LogoutAsync()
+    {
+        await TokenStorage.ClearTokenAsync();
+        AuthStateProvider.NotifyUserLoggedOut();
+        Navigation.NavigateTo("/login", forceLoad: true);
+    }
+
+    private static string GetInitials(string? fullName)
+    {
+        if (string.IsNullOrWhiteSpace(fullName))
+        {
+            return "?";
+        }
+
+        var parts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length switch
+        {
+            0 => "?",
+            1 => parts[0][0].ToString().ToUpper(),
+            _ => (parts[0][0].ToString() + parts[^1][0].ToString()).ToUpper()
+        };
+    }
+
+    private static string GetTitle(string path) => path switch
+    {
+        "" => "Dashboard",
+        "my-record" => "My Record",
+        "patients" => "Patients",
+        "spotlight" => "Quick Lookup",
+        "dashboard" => "Patient Charts",
+        "referrals" => "Referrals",
+        "appointments" => "Appointments",
+        "field-visits" => "Field Visits",
+        "facilities" => "Facilities",
+        "chat" => "Messages",
+        "login" => "Sign In",
+        "register" => "Register",
+        _ when path.StartsWith("patients/") => "Patient Record",
+        _ => "MedConnect",
+    };
+}

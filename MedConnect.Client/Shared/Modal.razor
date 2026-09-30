@@ -1,0 +1,30 @@
+@if (Show)
+{
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-slate-900/20" @onclick="CloseAsync"></div>
+        <div class="relative w-full max-w-md rounded-md border border-slate-200 bg-white shadow-lg max-h-[85vh] flex flex-col">
+            <div class="flex items-center justify-between border-b border-slate-200 p-4 shrink-0">
+                <p class="text-sm font-semibold text-slate-900">@Title</p>
+                <button @onclick="CloseAsync" aria-label="Close" class="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-slate-50 hover:text-slate-600">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-5 w-5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <div class="p-4 overflow-y-auto">
+                @ChildContent
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Show { get; set; }
+    [Parameter] public EventCallback<bool> ShowChanged { get; set; }
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private async Task CloseAsync()
+    {
+        Show = false;
+        await ShowChanged.InvokeAsync(false);
+    }
+}

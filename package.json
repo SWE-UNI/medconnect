@@ -1,0 +1,10 @@
+{
+  "name": "medconnect-client",
+  "private": true,
+  "scripts": {
+    "css": "tailwindcss -i ./tailwind.input.css -o ./MedConnect.Client/wwwroot/css/tailwind.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
+  }
+}

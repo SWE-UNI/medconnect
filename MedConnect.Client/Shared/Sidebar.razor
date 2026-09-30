@@ -1,0 +1,208 @@
+@using MedConnect.Client.Features.Referrals
+@inject CustomAuthStateProvider AuthStateProvider
+@inject ReferralsApiClient ReferralsApi
+
+<!-- Desktop Sidebar (Sticky left navigation) -->
+<aside class="hidden lg:flex h-full w-56 shrink-0 flex-col border-r border-slate-200 bg-white">
+    <a href="/" class="flex h-14 items-center gap-2 px-4 border-b border-slate-200 hover:opacity-90 transition-opacity focus:outline-none">
+        <div class="h-7 w-7 shrink-0 rounded-md bg-blue-600 text-white flex items-center justify-center">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M12 5v14M5 12h14" /></svg>
+        </div>
+        <span class="text-sm font-semibold tracking-tight text-slate-900">MedConnect GH</span>
+    </a>
+
+    <nav class="flex-1 min-h-0 overflow-y-auto py-3 flex flex-col gap-0.5 px-2">
+        @foreach (var item in NavItems)
+        {
+            <AuthorizeView Roles="@item.Roles">
+                <Authorized>
+                    <NavLink class="@RailClass" ActiveClass="bg-blue-50 text-blue-700 font-semibold" href="@item.Href" Match="@(item.ExactMatch ? NavLinkMatch.All : NavLinkMatch.Prefix)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="h-[18px] w-[18px] shrink-0">@item.Icon</svg>
+                        <span>@item.Label</span>
+                        @if (item.Href == "/referrals" && _pendingReferrals > 0)
+                        {
+                            <span class="ml-auto inline-flex items-center justify-center rounded-md bg-red-50 border border-red-200 text-red-700 text-[10px] font-semibold px-1.5 py-0.5">@_pendingReferrals</span>
+                        }
+                    </NavLink>
+                </Authorized>
+            </AuthorizeView>
+        }
+    </nav>
+    <div class="p-3 border-t border-slate-200 mt-auto flex items-center justify-between">
+        <span class="text-xs text-slate-500 font-medium">Theme</span>
+        <ThemeToggle />
+    </div>
+</aside>
+
+<!-- Mobile Sidebar Drawer & Backdrop Overlay -->
+@if (IsMobileOpen)
+{
+    <div class="lg:hidden fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm transition-opacity" @onclick="CloseMobileNavAsync"></div>
+    <aside class="lg:hidden fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] h-full max-h-[100dvh] bg-white flex flex-col border-r border-slate-200 shadow-2xl overflow-hidden">
+        <!-- Mobile Drawer Header -->
+        <div class="flex h-14 shrink-0 items-center justify-between px-4 border-b border-slate-200">
+            <a href="/" @onclick="CloseMobileNavAsync" class="flex items-center gap-2 hover:opacity-90 transition-opacity focus:outline-none">
+                <div class="h-7 w-7 shrink-0 rounded-md bg-blue-600 text-white flex items-center justify-center">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M12 5v14M5 12h14" /></svg>
+                </div>
+                <span class="text-sm font-semibold tracking-tight text-slate-900">MedConnect GH</span>
+            </a>
+            <button type="button" @onclick="CloseMobileNavAsync" aria-label="Close menu"
+                    class="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+            </button>
+        </div>
+
+        <!-- User Profile Info inside Mobile Drawer -->
+        <AuthorizeView>
+            <Authorized>
+                <div class="shrink-0 p-3 bg-slate-50 border-b border-slate-200">
+                    <div class="flex items-center gap-2.5">
+                        <div class="h-9 w-9 shrink-0 rounded-md bg-blue-600 text-white flex items-center justify-center text-xs font-semibold">
+                            @GetInitials(context.User.FindFirst("FullName")?.Value)
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <p class="text-xs font-semibold text-slate-900 truncate">@context.User.FindFirst("FullName")?.Value</p>
+                            <p class="text-[10px] text-slate-500 truncate">@context.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value</p>
+                        </div>
+                    </div>
+                </div>
+            </Authorized>
+        </AuthorizeView>
+
+        <!-- Full Navigation Menu List -->
+        <nav class="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 pb-16 flex flex-col gap-1" style="-webkit-overflow-scrolling: touch; touch-action: pan-y;">
+            <p class="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Navigation</p>
+            @foreach (var item in NavItems)
+            {
+                <AuthorizeView Roles="@item.Roles">
+                    <Authorized>
+                        <NavLink class="@RailClass" ActiveClass="bg-blue-50 text-blue-700 font-semibold" href="@item.Href" Match="@(item.ExactMatch ? NavLinkMatch.All : NavLinkMatch.Prefix)" @onclick="CloseMobileNavAsync">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="h-[18px] w-[18px] shrink-0">@item.Icon</svg>
+                            <span class="truncate">@item.Label</span>
+                            @if (item.Href == "/referrals" && _pendingReferrals > 0)
+                            {
+                                <span class="ml-auto inline-flex items-center justify-center rounded-md bg-red-50 border border-red-200 text-red-700 text-[10px] font-semibold px-1.5 py-0.5">@_pendingReferrals</span>
+                            }
+                        </NavLink>
+                    </Authorized>
+                </AuthorizeView>
+            }
+        </nav>
+        <div class="p-3 border-t border-slate-200 shrink-0 flex items-center justify-between bg-slate-50">
+            <span class="text-xs text-slate-600 font-medium">Theme</span>
+            <ThemeToggle />
+        </div>
+    </aside>
+}
+
+@code {
+    [Parameter] public bool IsMobileOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsMobileOpenChanged { get; set; }
+
+    private const string RailClass =
+        "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900";
+
+    private async Task CloseMobileNavAsync()
+    {
+        if (IsMobileOpen)
+        {
+            IsMobileOpen = false;
+            await IsMobileOpenChanged.InvokeAsync(false);
+        }
+    }
+
+    private async Task ToggleMobileNavAsync()
+    {
+        IsMobileOpen = !IsMobileOpen;
+        await IsMobileOpenChanged.InvokeAsync(IsMobileOpen);
+    }
+
+    private static string GetInitials(string? fullName)
+    {
+        if (string.IsNullOrWhiteSpace(fullName)) return "?";
+        var parts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length switch
+        {
+            0 => "?",
+            1 => parts[0][0].ToString().ToUpper(),
+            _ => (parts[0][0].ToString() + parts[^1][0].ToString()).ToUpper()
+        };
+    }
+
+    private sealed record NavItem(string Href, string Label, MarkupString Icon, string? Roles, bool ExactMatch = false);
+
+    private static MarkupString Svg(string paths) => new(paths);
+
+    private static readonly List<NavItem> NavItems =
+    [
+        new("/", "Dashboard",
+            Svg("<path d=\"M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z\" /><path d=\"M9 22V12h6v10\" />"),
+            null, ExactMatch: true),
+        new("/my-record", "My Record",
+            Svg("<circle cx=\"12\" cy=\"8\" r=\"4\" /><path d=\"M4 21v-1a8 8 0 0 1 16 0v1\" />"),
+            "Patient"),
+        new("/patients", "Patients",
+            Svg("<circle cx=\"9\" cy=\"8\" r=\"3\" /><path d=\"M2 20v-1a6 6 0 0 1 12 0v1\" /><circle cx=\"17\" cy=\"8\" r=\"3\" /><path d=\"M14 14.5A6 6 0 0 1 22 20v1\" />"),
+            "CHW,Doctor,Nurse,FacilityAdmin,Admin"),
+        new("/spotlight", "Quick Lookup",
+            Svg("<circle cx=\"11\" cy=\"11\" r=\"7\" /><path d=\"M21 21l-4.3-4.3\" />"),
+            "CHW,Doctor,Nurse,FacilityAdmin,Admin"),
+        new("/dashboard", "Patient Charts",
+            Svg("<path d=\"M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z\" />"),
+            "CHW,Doctor,Nurse,FacilityAdmin,Admin"),
+        new("/lab-results", "Lab Results",
+            Svg("<path d=\"M9 2v6.5L3.5 17a2 2 0 0 0 1.9 3h13.2a2 2 0 0 0 1.9-3L15 8.5V2\" /><path d=\"M7.5 2h9M6 11h12\" />"),
+            "CHW,Doctor,Nurse,FacilityAdmin,Admin"),
+        new("/prescriptions", "Prescriptions",
+            Svg("<path d=\"m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z\" /><path d=\"m8.5 8.5 7 7\" />"),
+            "CHW,Doctor,Nurse,FacilityAdmin,Admin"),
+        new("/referrals", "Referrals",
+            Svg("<path d=\"M17 3l4 4-4 4\" /><path d=\"M3 7h18\" /><path d=\"M7 21l-4-4 4-4\" /><path d=\"M21 17H3\" />"),
+            "CHW,Doctor,Nurse,FacilityAdmin,Admin"),
+        new("/appointments", "Appointments",
+            Svg("<rect x=\"3\" y=\"4\" width=\"18\" height=\"18\" rx=\"2\" /><path d=\"M16 2v4M8 2v4M3 10h18\" />"),
+            "CHW,Doctor,Nurse,FacilityAdmin,Admin,Receptionist"),
+        new("/field-visits", "Field Visits",
+            Svg("<path d=\"M12 21s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12z\" /><circle cx=\"12\" cy=\"9\" r=\"2.5\" />"),
+            "CHW"),
+        new("/facilities", "Facilities",
+            Svg("<rect x=\"4\" y=\"3\" width=\"16\" height=\"18\" rx=\"1\" /><path d=\"M9 21v-4h6v4\" /><path d=\"M8 7h2M14 7h2M8 11h2M14 11h2\" />"),
+            "Admin"),
+        new("/staff", "Staff Accounts",
+            Svg("<circle cx=\"12\" cy=\"8\" r=\"3.5\" /><path d=\"M5.5 20v-1.5a6.5 6.5 0 0 1 13 0V20\" />"),
+            "Admin"),
+        new("/audit", "Audit Log",
+            Svg("<circle cx=\"12\" cy=\"12\" r=\"9\" /><path d=\"M12 7v5l3 2\" />"),
+            "Admin"),
+        new("/analytics", "Analytics",
+            Svg("<path d=\"M3 3v18h18\" /><path d=\"M7 15l4-4 3 3 5-6\" />"),
+            "Admin"),
+        new("/chat", "Messages",
+            Svg("<path d=\"M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 0 1-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z\" />"),
+            null),
+        new("/security", "Security",
+            Svg("<path d=\"M12 22s8-3.5 8-10V5l-8-3-8 3v7c0 6.5 8 10 8 10z\" />"),
+            null),
+    ];
+
+    private int _pendingReferrals;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (authState.User.IsInRole("CHW") || authState.User.IsInRole("Doctor") ||
+            authState.User.IsInRole("Nurse") || authState.User.IsInRole("FacilityAdmin"))
+        {
+            var facilityClaim = authState.User.FindFirst("FacilityId")?.Value;
+            if (facilityClaim is not null && int.TryParse(facilityClaim, out var facilityId))
+            {
+                var referrals = await ReferralsApi.GetIncomingAsync(facilityId);
+                _pendingReferrals = referrals.Count(r => r.Status == 0);
+            }
+        }
+    }
+}
+
