@@ -1,0 +1,143 @@
+@page "/patients"
+@using MedConnect.Client.Shared
+@inject PatientsApiClient PatientsApi
+
+<PageTitle>Patients - MedConnect GH</PageTitle>
+
+<AuthorizeView Roles="CHW,Doctor,Nurse,FacilityAdmin,Admin" Context="_">
+    <Authorized>
+        <div class="max-w-4xl">
+            <div class="flex items-center justify-end gap-3">
+                <button @onclick="() => _showCreateModal = true"
+                        class="shrink-0 min-h-[44px] rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">
+                    + New patient
+                </button>
+            </div>
+
+            <Modal Title="Register a walk-in patient" @bind-Show="_showCreateModal">
+                <EditForm Model="_newPatient" OnValidSubmit="HandleCreateAsync" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <label class="text-xs">
+                        <span class="text-slate-500">NHIS Number</span>
+                        <InputText id="nhis" @bind-Value="_newPatient.NHISNumber" class="@FieldClass" />
+                    </label>
+                    <label class="text-xs">
+                        <span class="text-slate-500">Full name</span>
+                        <InputText id="fullName" @bind-Value="_newPatient.FullName" class="@FieldClass" />
+                    </label>
+                    <label class="text-xs">
+                        <span class="text-slate-500">Date of birth</span>
+                        <InputDate id="dob" @bind-Value="_newPatient.DateOfBirth" class="@FieldClass" />
+                    </label>
+                    <label class="text-xs">
+                        <span class="text-slate-500">Contact info</span>
+                        <InputText id="contact" @bind-Value="_newPatient.ContactInfo" class="@FieldClass" />
+                    </label>
+                    <label class="text-xs">
+                        <span class="text-slate-500">Blood type (optional)</span>
+                        <InputSelect id="bloodType" @bind-Value="_newPatient.BloodType" class="@FieldClass">
+                            <option value="">Unknown</option>
+                            <option value="O+">O+</option>
+                            <option value="O-">O-</option>
+                            <option value="A+">A+</option>
+                            <option value="A-">A-</option>
+                            <option value="B+">B+</option>
+                            <option value="B-">B-</option>
+                            <option value="AB+">AB+</option>
+                            <option value="AB-">AB-</option>
+                        </InputSelect>
+                    </label>
+
+                    @if (_error is not null)
+                    {
+                        <p class="text-xs text-red-600 sm:col-span-2">@_error</p>
+                    }
+
+                    <button type="submit" disabled="@_busy"
+                            class="sm:col-span-2 min-h-[44px] rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                        Register patient
+                    </button>
+                </EditForm>
+            </Modal>
+
+            <div class="mt-4">
+                <ListCard TItem="PatientDto" Title="All patients" Items="FilteredPatients"
+                          EmptyText="@(_patients.Count == 0 ? "No patients registered yet." : $"No patients match \"{_searchTerm}\".")">
+                    <HeaderContent>
+                        <input type="search" placeholder="Search by name or NHIS number..." @bind="_searchTerm" @bind:event="oninput"
+                               class="w-56 min-h-[36px] rounded-md border border-slate-300 px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+                    </HeaderContent>
+                    <RowTemplate Context="p">
+                        <a href="@($"/patients/{p.PatientId}")" class="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 px-4 py-3 hover:bg-slate-50">
+                            <span class="text-sm font-medium text-slate-900 sm:w-48 truncate">@p.FullName</span>
+                            <span class="text-xs text-slate-500 sm:w-40">NHIS @p.NHISNumber</span>
+                            <span class="text-xs text-slate-500">@p.ContactInfo</span>
+                        </a>
+                    </RowTemplate>
+                </ListCard>
+            </div>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private const string FieldClass =
+        "mt-1 w-full min-h-[44px] rounded-md border border-slate-300 px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30";
+
+    private List<PatientDto> _patients = [];
+    private readonly NewPatientModel _newPatient = new();
+    private string? _error;
+    private bool _busy;
+    private bool _showCreateModal;
+    private string _searchTerm = "";
+
+    private List<PatientDto> FilteredPatients => string.IsNullOrWhiteSpace(_searchTerm)
+        ? _patients
+        : _patients.Where(p =>
+                p.FullName.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                p.NHISNumber.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _patients = await PatientsApi.GetAllAsync();
+    }
+
+    private async Task HandleCreateAsync()
+    {
+        _busy = true;
+        _error = null;
+
+        var result = await PatientsApi.CreateAsync(new CreatePatientDto(
+            _newPatient.NHISNumber, _newPatient.FullName,
+            DateOnly.FromDateTime(_newPatient.DateOfBirth), _newPatient.ContactInfo,
+            string.IsNullOrEmpty(_newPatient.BloodType) ? null : _newPatient.BloodType));
+
+        if (result.Succeeded)
+        {
+            _patients.Insert(0, result.Value!);
+            _newPatient.NHISNumber = "";
+            _newPatient.FullName = "";
+            _newPatient.ContactInfo = "";
+            _newPatient.BloodType = "";
+            _showCreateModal = false;
+        }
+        else
+        {
+            _error = result.Error;
+        }
+
+        _busy = false;
+    }
+
+    private class NewPatientModel
+    {
+        public string NHISNumber { get; set; } = "";
+        public string FullName { get; set; } = "";
+        public DateTime DateOfBirth { get; set; } = DateTime.Today.AddYears(-30);
+        public string ContactInfo { get; set; } = "";
+        public string BloodType { get; set; } = "";
+    }
+}
