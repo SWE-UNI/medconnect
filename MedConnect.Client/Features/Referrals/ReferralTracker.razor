@@ -1,0 +1,291 @@
+@page "/referrals"
+@using System.Security.Claims
+@using MedConnect.Client.Features.Facilities
+@using MedConnect.Client.Features.Patients
+@using MedConnect.Client.Shared
+@implements IAsyncDisposable
+@inject ReferralsApiClient ReferralsApi
+@inject FacilitiesApiClient FacilitiesApi
+@inject PatientsApiClient PatientsApi
+@inject TokenStorage TokenStorage
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Referrals - MedConnect GH</PageTitle>
+
+<AuthorizeView Roles="CHW,Doctor,Nurse,FacilityAdmin,Admin" Context="_">
+    <Authorized>
+        <div class="max-w-3xl">
+            <div class="flex items-center justify-end gap-3">
+                @if (_connected)
+                {
+                    <span class="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-emerald-700">Live</span>
+                }
+                <button @onclick="() => _showCreateModal = true"
+                        class="shrink-0 min-h-[44px] rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700">
+                    + New referral
+                </button>
+            </div>
+
+            @if (_isAdmin)
+            {
+                <div class="mt-4 rounded-md border border-slate-200 bg-white p-4">
+                    <label class="text-xs font-semibold uppercase tracking-wider text-slate-500" for="facilityPicker">Viewing facility</label>
+                    <InputSelect id="facilityPicker" TValue="int" Value="_myFacilityId" ValueChanged="HandleFacilityChangeAsync" ValueExpression="@(() => _myFacilityId)"
+                                 class="mt-1 block w-full max-w-xs min-h-[44px] rounded-md border border-slate-300 px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30">
+                        @foreach (var f in _facilities)
+                        {
+                            <option value="@f.FacilityId">@f.Name</option>
+                        }
+                    </InputSelect>
+                </div>
+            }
+
+            <Modal Title="Create a referral" @bind-Show="_showCreateModal">
+                <EditForm Model="_newReferral" OnValidSubmit="HandleCreateAsync" class="grid grid-cols-1 gap-3">
+                    <label class="text-xs">
+                        <span class="text-slate-500">Patient</span>
+                        <input type="text" placeholder="Search by name or NHIS number..." @bind="_patientQuery" @bind:event="oninput" class="@FieldClass" />
+                    </label>
+
+                    @if (!string.IsNullOrWhiteSpace(_patientQuery) && FilteredPatients.Count > 0)
+                    {
+                        <div class="-mt-2 max-h-40 overflow-y-auto rounded-md border border-slate-200">
+                            @foreach (var p in FilteredPatients.Take(8))
+                            {
+                                <button type="button" @onclick="() => SelectPatient(p)"
+                                        class="block w-full text-left px-3 py-2 text-sm hover:bg-slate-50 border-b border-slate-100 last:border-b-0 @(p.PatientId == _newReferral.PatientId ? "bg-slate-100 font-medium" : "")">
+                                    @p.FullName <span class="text-slate-400">&middot; NHIS @p.NHISNumber</span>
+                                </button>
+                            }
+                        </div>
+                    }
+
+                    @if (_selectedPatient is not null)
+                    {
+                        <p class="text-xs text-slate-500 -mt-2">Selected: <span class="font-medium text-slate-700">@_selectedPatient.FullName</span></p>
+                    }
+
+                    <label class="text-xs">
+                        <span class="text-slate-500">From facility</span>
+                        <InputSelect id="fromFacility" @bind-Value="_newReferral.FromFacilityId" class="@FieldClass">
+                            @foreach (var f in _facilities)
+                            {
+                                <option value="@f.FacilityId">@f.Name</option>
+                            }
+                        </InputSelect>
+                    </label>
+                    <label class="text-xs">
+                        <span class="text-slate-500">To facility</span>
+                        <InputSelect id="toFacility" @bind-Value="_newReferral.ToFacilityId" class="@FieldClass">
+                            @foreach (var f in _facilities)
+                            {
+                                <option value="@f.FacilityId">@f.Name</option>
+                            }
+                        </InputSelect>
+                    </label>
+
+                    @if (_error is not null)
+                    {
+                        <p class="text-xs text-red-600">@_error</p>
+                    }
+
+                    <button type="submit" disabled="@(_busy || _newReferral.PatientId == 0)"
+                            class="min-h-[44px] rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+                        Create referral
+                    </button>
+                </EditForm>
+            </Modal>
+
+            <div class="mt-4">
+                <ListCard TItem="ReferralDto" Title="Incoming referrals" Items="_referrals" EmptyText="No incoming referrals.">
+                    <RowTemplate Context="r">
+                        @{ var meta = ReferralStatusMeta(r.Status); }
+                        <div class="flex flex-col sm:flex-row sm:items-center gap-2 p-3">
+                            <span class="text-sm text-slate-700 sm:w-24">Patient #@r.PatientId</span>
+                            <span class="flex-1 text-sm text-slate-700">@r.FromFacilityName &rarr; @r.ToFacilityName</span>
+                            <span class="rounded-md border px-2 py-0.5 text-xs font-semibold uppercase tracking-wider @meta.Classes">@meta.Label</span>
+                            <select value="@r.Status" @onchange="@(e => HandleStatusChangeAsync(r.ReferralId, int.Parse((string)e.Value!)))"
+                                    class="rounded-md border border-slate-200 px-2 py-1.5 text-xs min-h-[44px]">
+                                <option value="0">Pending</option>
+                                <option value="1">Accepted</option>
+                                <option value="2">InTransit</option>
+                                <option value="3">Completed</option>
+                                <option value="4">Cancelled</option>
+                            </select>
+                        </div>
+                    </RowTemplate>
+                </ListCard>
+            </div>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private const string FieldClass =
+        "mt-1 w-full min-h-[44px] rounded-md border border-slate-300 px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30";
+
+    private static (string Label, string Classes) ReferralStatusMeta(int status) => status switch
+    {
+        1 => ("Accepted", "bg-blue-50 text-blue-700 border-blue-200"),
+        2 => ("In transit", "bg-blue-50 text-blue-700 border-blue-200"),
+        3 => ("Completed", "bg-emerald-50 text-emerald-700 border-emerald-200"),
+        4 => ("Cancelled", "bg-slate-100 text-slate-500 border-slate-200"),
+        _ => ("Pending", "bg-amber-50 text-amber-700 border-amber-200"),
+    };
+
+    private List<ReferralDto> _referrals = [];
+    private List<FacilityDto> _facilities = [];
+    private List<PatientDto> _allPatients = [];
+    private PatientDto? _selectedPatient;
+    private string _patientQuery = "";
+    private readonly NewReferralModel _newReferral = new();
+    private string? _error;
+    private bool _busy;
+
+    private List<PatientDto> FilteredPatients => _allPatients
+        .Where(p => p.FullName.Contains(_patientQuery, StringComparison.OrdinalIgnoreCase) ||
+                    p.NHISNumber.Contains(_patientQuery, StringComparison.OrdinalIgnoreCase))
+        .ToList();
+    private bool _showCreateModal;
+    private bool _connected;
+    private bool _isAdmin;
+    private int _myFacilityId;
+    private HubConnection? _hub;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _facilities = await FacilitiesApi.GetAllAsync();
+        _allPatients = await PatientsApi.GetAllAsync();
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _isAdmin = authState.User.IsInRole("Admin");
+        var facilityClaim = authState.User.FindFirst("FacilityId")?.Value;
+
+        if (facilityClaim is not null && int.TryParse(facilityClaim, out var facilityId))
+        {
+            _myFacilityId = facilityId;
+        }
+        else if (_isAdmin && _facilities.Count > 0)
+        {
+            _myFacilityId = _facilities[0].FacilityId;
+        }
+
+        if (_myFacilityId != 0)
+        {
+            _referrals = await ReferralsApi.GetIncomingAsync(_myFacilityId);
+        }
+
+        var token = await TokenStorage.GetTokenAsync();
+        _hub = new HubConnectionBuilder()
+            .WithUrl(ApiEndpoints.Hub("/hubs/referrals"), options =>
+            {
+                options.AccessTokenProvider = () => Task.FromResult(token);
+            })
+            .WithAutomaticReconnect()
+            .Build();
+
+        _hub.On<ReferralDto>("ReferralCreated", HandleIncomingReferral);
+        _hub.On<ReferralDto>("ReferralStatusChanged", HandleIncomingReferral);
+
+        try
+        {
+            await _hub.StartAsync();
+            _connected = true;
+
+            if (_isAdmin && _myFacilityId != 0)
+            {
+                await _hub.InvokeAsync("JoinFacilityGroup", _myFacilityId);
+            }
+        }
+        catch
+        {
+            _connected = false;
+        }
+    }
+
+    private async Task HandleFacilityChangeAsync(int facilityId)
+    {
+        _myFacilityId = facilityId;
+        _referrals = await ReferralsApi.GetIncomingAsync(_myFacilityId);
+
+        if (_hub is not null && _hub.State == HubConnectionState.Connected)
+        {
+            await _hub.InvokeAsync("JoinFacilityGroup", _myFacilityId);
+        }
+    }
+
+    private void HandleIncomingReferral(ReferralDto referral)
+    {
+        if (referral.ToFacilityId != _myFacilityId && referral.FromFacilityId != _myFacilityId)
+        {
+            return;
+        }
+
+        InvokeAsync(() =>
+        {
+            var index = _referrals.FindIndex(r => r.ReferralId == referral.ReferralId);
+            if (index >= 0)
+            {
+                _referrals[index] = referral;
+            }
+            else
+            {
+                _referrals.Insert(0, referral);
+            }
+            StateHasChanged();
+        });
+    }
+
+    private void SelectPatient(PatientDto patient)
+    {
+        _selectedPatient = patient;
+        _newReferral.PatientId = patient.PatientId;
+        _patientQuery = "";
+    }
+
+    private async Task HandleCreateAsync()
+    {
+        _busy = true;
+        _error = null;
+
+        var result = await ReferralsApi.CreateAsync(new CreateReferralDto(
+            _newReferral.PatientId, _newReferral.FromFacilityId, _newReferral.ToFacilityId));
+
+        if (result.Succeeded)
+        {
+            _showCreateModal = false;
+            _selectedPatient = null;
+            _newReferral.PatientId = 0;
+        }
+        else
+        {
+            _error = result.Error;
+        }
+
+        _busy = false;
+    }
+
+    private async Task HandleStatusChangeAsync(int referralId, int newStatus)
+    {
+        await ReferralsApi.UpdateStatusAsync(referralId, newStatus);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hub is not null)
+        {
+            await _hub.DisposeAsync();
+        }
+    }
+
+    private class NewReferralModel
+    {
+        public int PatientId { get; set; }
+        public int FromFacilityId { get; set; }
+        public int ToFacilityId { get; set; }
+    }
+}

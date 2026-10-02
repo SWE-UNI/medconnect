@@ -1,0 +1,71 @@
+@using Microsoft.AspNetCore.SignalR.Client
+@using MedConnect.Client.Services
+@inject NavigationManager Navigation
+@inject TokenStorage TokenStorage
+@implements IAsyncDisposable
+
+@if (_latestAlert != null)
+{
+    <div class="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 lg:px-6 py-2" id="referral-alert-bar">
+        <div class="flex items-center gap-2 text-sm text-amber-900">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4 shrink-0 text-amber-600">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
+            </svg>
+            <span><strong class="font-semibold">Live update:</strong> @_latestAlert</span>
+        </div>
+        <button @onclick="DismissAlert" class="text-amber-600 hover:text-amber-900 text-lg leading-none">&times;</button>
+    </div>
+}
+
+@code {
+    private HubConnection? _hubConnection;
+    private string? _latestAlert;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var token = await TokenStorage.GetTokenAsync();
+        if (string.IsNullOrEmpty(token)) return;
+
+        _hubConnection = new HubConnectionBuilder()
+            .WithUrl(ApiEndpoints.Hub("/hubs/referrals"), options =>
+            {
+                options.AccessTokenProvider = () => Task.FromResult<string?>(token);
+            })
+            .WithAutomaticReconnect()
+            .Build();
+
+        _hubConnection.On<string>("NewReferralAlert", (message) =>
+        {
+            _latestAlert = message;
+            StateHasChanged();
+        });
+
+        _hubConnection.On<int, string>("ReferralStatusUpdated", (referralId, statusText) =>
+        {
+            _latestAlert = $"Referral #{referralId} status has changed to: {statusText}";
+            StateHasChanged();
+        });
+
+        try
+        {
+            await _hubConnection.StartAsync();
+        }
+        catch
+        {
+            // Fail silently if offline/disconnected
+        }
+    }
+
+    private void DismissAlert()
+    {
+        _latestAlert = null;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hubConnection != null)
+        {
+            await _hubConnection.DisposeAsync();
+        }
+    }
+}
