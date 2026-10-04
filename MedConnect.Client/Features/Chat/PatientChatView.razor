@@ -1,0 +1,474 @@
+@page "/chat"
+@using MedConnect.Client.Features.Chat
+@using MedConnect.Client.Services
+@using MedConnect.Client.Shared
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.SignalR.Client
+@using System.Security.Claims
+@inject ChatApiClient ChatApi
+@inject TokenStorage TokenStorage
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>Messages - MedConnect GH</PageTitle>
+
+<AuthorizeView>
+    <Authorized>
+        <div class="max-w-5xl">
+            <div class="flex h-[calc(100vh-9rem)] lg:h-[70vh] lg:min-h-[480px] overflow-hidden rounded-md border border-slate-200 bg-white">
+                <div class="@(_selectedUserId is null ? "flex" : "hidden") w-full flex-col border-r border-slate-200 lg:flex lg:w-72 lg:shrink-0">
+                    <div class="flex items-center justify-between p-3">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Conversations</span>
+                        <button @onclick="OpenNewMessageAsync" title="New message"
+                                class="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-50 hover:text-slate-600">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4"><path d="M12 5v14M5 12h14" /></svg>
+                        </button>
+                    </div>
+                    <div class="flex-1 overflow-y-auto">
+                        @if (_conversations == null)
+                        {
+                            <div class="p-3 text-sm text-slate-500">Loading conversations...</div>
+                        }
+                        else if (!_conversations.Any())
+                        {
+                            <div class="p-3 text-sm text-slate-500">No active conversations</div>
+                        }
+                        else
+                        {
+                            <ul class="divide-y divide-slate-100">
+                                @foreach (var convo in _conversations)
+                                {
+                                    <li @onclick="() => SelectConversation(convo)"
+                                        class="flex cursor-pointer items-center gap-3 p-3 hover:bg-slate-50 @(convo.OtherUserId == _selectedUserId ? "bg-slate-100" : "")">
+                                        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-semibold text-white">@GetInitials(convo.OtherUserName)</div>
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex items-center justify-between gap-2">
+                                                <span class="truncate text-sm font-medium text-slate-900">@convo.OtherUserName</span>
+                                                <span class="shrink-0 text-xs text-slate-400">@convo.LastMessage.Timestamp.ToString("HH:mm")</span>
+                                            </div>
+                                            <div class="text-xs text-slate-500">@convo.OtherUserRole</div>
+                                            <div class="truncate text-xs text-slate-500">@convo.LastMessage.Message</div>
+                                        </div>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                </div>
+
+                <div class="@(_selectedUserId is null ? "hidden" : "flex") w-full min-w-0 flex-col lg:flex lg:flex-1">
+                    @if (!string.IsNullOrEmpty(_selectedUserId))
+                    {
+                        <div class="flex items-center gap-2 border-b border-slate-200 p-3">
+                            <button @onclick="() => _selectedUserId = null" title="Back to conversations"
+                                    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-slate-50 hover:text-slate-600 lg:hidden">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5"><path d="M15 19l-7-7 7-7" /></svg>
+                            </button>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm font-semibold text-slate-900 truncate">@_selectedUserName</div>
+                                <div class="text-xs text-slate-500">Attending clinical staff / patient</div>
+                            </div>
+                            <div class="flex items-center gap-1.5 text-xs">
+                                @if (IsConnected)
+                                {
+                                    <span class="inline-flex h-2 w-2 rounded-full bg-emerald-500" title="Connected"></span>
+                                    <span class="text-slate-400 hidden sm:inline">Connected</span>
+                                }
+                                else if (_isReconnecting)
+                                {
+                                    <span class="inline-flex h-2 w-2 rounded-full bg-amber-400 animate-pulse" title="Reconnecting..."></span>
+                                    <span class="text-amber-600 hidden sm:inline">Reconnecting</span>
+                                }
+                                else
+                                {
+                                    <span class="inline-flex h-2 w-2 rounded-full bg-slate-300" title="Syncing via API"></span>
+                                    <span class="text-slate-400 hidden sm:inline">Syncing</span>
+                                }
+                            </div>
+                        </div>
+
+                        <div class="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4" id="chat-messages-container">
+                            @foreach (var msg in _messages)
+                            {
+                                var isMe = msg.SenderId == _currentUserId;
+                                <div class="flex @(isMe ? "justify-end" : "justify-start")">
+                                    <div class="flex max-w-[70%] flex-col gap-1 @(isMe ? "items-end" : "items-start")">
+                                        <div class="rounded-md px-3 py-2 text-sm @(isMe ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-900")">
+                                            <div>@msg.Message</div>
+
+                                            @if (!string.IsNullOrEmpty(msg.AttachmentType))
+                                             {
+                                                <div class="mt-1 flex items-center gap-1 text-xs @(isMe ? "text-white/70" : "text-slate-500")">
+                                                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z" />
+                                                    </svg>
+                                                    <span>Linked @msg.AttachmentType</span>
+                                                </div>
+                                            }
+                                        </div>
+                                        <div class="flex items-center gap-1 text-xs text-slate-400">
+                                            <span>@msg.Timestamp.ToString("HH:mm")</span>
+                                            @if (isMe)
+                                            {
+                                                <svg class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 0 1 0 1.414l-8 8a1 1 0 0 1-1.414 0l-4-4a1 1 0 0 1 1.414-1.414L8 12.586l7.293-7.293a1 1 0 0 1 1.414 0z" clip-rule="evenodd" />
+                                                </svg>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(_sendErrorMessage))
+                        {
+                            <div class="mx-3 my-1 rounded bg-amber-50 border border-amber-200 px-3 py-1.5 text-xs text-amber-800 flex items-center justify-between">
+                                <span>@_sendErrorMessage</span>
+                                <button type="button" @onclick="() => _sendErrorMessage = null" class="text-amber-600 hover:text-amber-800 font-semibold ml-2">Dismiss</button>
+                            </div>
+                        }
+
+                        <div class="flex items-center gap-2 border-t border-slate-200 p-3">
+                            <input type="text"
+                                   placeholder="Write a message..."
+                                   @bind-value="_messageText"
+                                   @onkeyup="OnKeyUp"
+                                   disabled="@_isSending"
+                                   class="min-h-[44px] flex-1 rounded-md border border-slate-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-50" />
+                            <button @onclick="SendMessageAsync"
+                                    disabled="@(_isSending || string.IsNullOrWhiteSpace(_messageText))"
+                                    class="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                                @if (_isSending)
+                                {
+                                    <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                                    </svg>
+                                }
+                                else
+                                {
+                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                    </svg>
+                                }
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="flex flex-1 flex-col items-center justify-center gap-2 text-slate-400">
+                            <svg class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 0 1-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                            <div class="text-sm">Select a conversation to start messaging</div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <Modal Title="New message" @bind-Show="_showNewMessageModal">
+                <input type="text" placeholder="Search people..." @bind="_contactSearch" @bind:event="oninput"
+                       class="w-full min-h-[44px] rounded-md border border-slate-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
+
+                <div class="mt-3 max-h-80 overflow-y-auto -mx-4">
+                    @if (_contacts is null)
+                    {
+                        <p class="px-4 text-sm text-slate-500">Loading people...</p>
+                    }
+                    else if (FilteredContacts.Count == 0)
+                    {
+                        <p class="px-4 text-sm text-slate-500">No one matches "@_contactSearch".</p>
+                    }
+                    else
+                    {
+                        <ul class="divide-y divide-slate-100">
+                            @foreach (var contact in FilteredContacts)
+                            {
+                                <li>
+                                    <button @onclick="() => StartChatWithAsync(contact)"
+                                            class="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50">
+                                        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-600">@GetInitials(contact.FullName)</div>
+                                        <div class="min-w-0">
+                                            <p class="text-sm font-medium text-slate-900 truncate">@contact.FullName</p>
+                                            <p class="text-xs text-slate-500">@contact.Role</p>
+                                        </div>
+                                    </button>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </Modal>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <RedirectToLogin />
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private string? _currentUserId;
+    private HubConnection? _hubConnection;
+    private List<ConversationDto> _conversations = [];
+    private List<ChatMessageDto> _messages = [];
+    private string? _selectedUserId;
+    private string? _selectedUserName;
+    private string _messageText = "";
+    private bool _showNewMessageModal;
+    private List<ContactDto>? _contacts;
+    private string _contactSearch = "";
+    private bool _shouldScrollToBottom;
+    private bool _isSending;
+    private bool _isReconnecting;
+    private string? _sendErrorMessage;
+    private PeriodicTimer? _pollTimer;
+    private CancellationTokenSource? _cts;
+
+    private bool IsConnected => _hubConnection is { State: HubConnectionState.Connected };
+
+    private List<ContactDto> FilteredContacts => (_contacts ?? [])
+        .Where(c => string.IsNullOrWhiteSpace(_contactSearch) ||
+                    c.FullName.Contains(_contactSearch, StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _currentUserId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrEmpty(_currentUserId))
+        {
+            return;
+        }
+
+        try
+        {
+            _conversations = await ChatApi.GetConversationsAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Chat] Failed to load conversations: {ex.Message}");
+        }
+
+        var token = await TokenStorage.GetTokenAsync();
+        try
+        {
+            _hubConnection = new HubConnectionBuilder()
+                .WithUrl(ApiEndpoints.Hub("/hubs/chats"), options =>
+                {
+                    options.AccessTokenProvider = () => Task.FromResult<string?>(token);
+                })
+                .WithAutomaticReconnect()
+                .Build();
+
+            _hubConnection.On<string, string, DateTime, bool, string?, int?>("ReceiveMessage", async (senderId, message, timestamp, isUrgent, attachmentType, attachmentId) =>
+            {
+                if (senderId == _selectedUserId || senderId == _currentUserId)
+                {
+                    _messages.Add(new ChatMessageDto(0, senderId, "", "", "", message, timestamp, isUrgent, attachmentType, attachmentId));
+                    _shouldScrollToBottom = true;
+                    StateHasChanged();
+                }
+
+                _conversations = await ChatApi.GetConversationsAsync();
+                StateHasChanged();
+            });
+
+            _hubConnection.Reconnecting += _ =>
+            {
+                _isReconnecting = true;
+                InvokeAsync(StateHasChanged);
+                return Task.CompletedTask;
+            };
+
+            _hubConnection.Reconnected += _ =>
+            {
+                _isReconnecting = false;
+                InvokeAsync(StateHasChanged);
+                return Task.CompletedTask;
+            };
+
+            _hubConnection.Closed += _ =>
+            {
+                _isReconnecting = false;
+                InvokeAsync(StateHasChanged);
+                return Task.CompletedTask;
+            };
+
+            await _hubConnection.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Chat] SignalR connection warning: {ex.Message}");
+        }
+
+        StartPollingLoop();
+    }
+
+    private void StartPollingLoop()
+    {
+        _cts = new CancellationTokenSource();
+        _pollTimer = new PeriodicTimer(TimeSpan.FromSeconds(4));
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (_pollTimer != null && await _pollTimer.WaitForNextTickAsync(_cts.Token))
+                {
+                    if (!string.IsNullOrEmpty(_selectedUserId))
+                    {
+                        // If not connected via SignalR, poll history to sync incoming messages
+                        if (!IsConnected)
+                        {
+                            var history = await ChatApi.GetHistoryAsync(_selectedUserId);
+                            if (history != null && history.Count != _messages.Count)
+                            {
+                                _messages = history;
+                                _shouldScrollToBottom = true;
+                                await InvokeAsync(StateHasChanged);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Chat] Polling loop notice: {ex.Message}");
+            }
+        });
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_shouldScrollToBottom)
+        {
+            _shouldScrollToBottom = false;
+            await JS.InvokeVoidAsync("scrollToBottom", "chat-messages-container");
+        }
+    }
+
+    private async Task SelectConversation(ConversationDto convo)
+    {
+        _selectedUserId = convo.OtherUserId;
+        _selectedUserName = convo.OtherUserName;
+        _sendErrorMessage = null;
+        _messages = await ChatApi.GetHistoryAsync(_selectedUserId);
+        _shouldScrollToBottom = true;
+        StateHasChanged();
+    }
+
+    private async Task OpenNewMessageAsync()
+    {
+        _showNewMessageModal = true;
+        _contactSearch = "";
+        _contacts ??= await ChatApi.GetContactsAsync();
+    }
+
+    private async Task StartChatWithAsync(ContactDto contact)
+    {
+        _selectedUserId = contact.UserId;
+        _selectedUserName = contact.FullName;
+        _sendErrorMessage = null;
+        _messages = await ChatApi.GetHistoryAsync(contact.UserId);
+        _showNewMessageModal = false;
+        _shouldScrollToBottom = true;
+    }
+
+    private async Task SendMessageAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_messageText) || string.IsNullOrEmpty(_selectedUserId) || _isSending)
+            return;
+
+        var text = _messageText.Trim();
+        _messageText = "";
+        _sendErrorMessage = null;
+        _isSending = true;
+        StateHasChanged();
+
+        try
+        {
+            // 1. If SignalR is connected, send via SignalR
+            if (_hubConnection is { State: HubConnectionState.Connected })
+            {
+                await _hubConnection.SendAsync("SendMessage", _selectedUserId, text, false, null, null);
+                return;
+            }
+
+            // 2. If disconnected, try a quick reconnect before falling back
+            if (_hubConnection is { State: HubConnectionState.Disconnected })
+            {
+                try
+                {
+                    await _hubConnection.StartAsync();
+                    if (_hubConnection.State == HubConnectionState.Connected)
+                    {
+                        await _hubConnection.SendAsync("SendMessage", _selectedUserId, text, false, null, null);
+                        return;
+                    }
+                }
+                catch
+                {
+                    // Fall through to REST API
+                }
+            }
+
+            // 3. Fallback to REST API
+            var restResult = await ChatApi.SendMessageAsync(new SendMessageDto(_selectedUserId, text));
+            if (restResult.Succeeded && restResult.Value != null)
+            {
+                _messages.Add(restResult.Value);
+                _shouldScrollToBottom = true;
+                _conversations = await ChatApi.GetConversationsAsync();
+                return;
+            }
+
+            // 4. If neither worked, restore message and show warning
+            _messageText = text;
+            _sendErrorMessage = "Chat connection is offline and could not deliver message. Please retry in a moment.";
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Chat] Error sending message: {ex.Message}");
+            _messageText = text;
+            _sendErrorMessage = $"Error delivering message: {ex.Message}";
+        }
+        finally
+        {
+            _isSending = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SendMessageAsync();
+        }
+    }
+
+    private static string GetInitials(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "?";
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return "?";
+        if (parts.Length == 1) return parts[0][0].ToString().ToUpper();
+        return (parts[0][0].ToString() + parts[^1][0].ToString()).ToUpper();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _pollTimer?.Dispose();
+
+        if (_hubConnection != null)
+        {
+            await _hubConnection.DisposeAsync();
+        }
+    }
+}
